@@ -1,0 +1,45 @@
+# ruff.toml — o piso de lint/format de Python da casa (schematize-python).
+# O projeto ESTENDE isto; não reinventa:
+#   # no pyproject.toml do projeto
+#   [tool.ruff]
+#   extend = ".claude/skills/schematize-python/assets/lint/ruff.toml"
+#
+# Um só formatador: o `ruff format` substitui black + isort. Ter dois é ter dois resultados.
+
+line-length = 100          # 88 é o default do black; a casa usa 100, igual ao resto do catálogo
+target-version = "py313"   # piso de sintaxe = o menor Python do alvo da casa (3.13); suba junto com o `requires-python`
+src = ["src", "tests"]
+
+[lint]
+select = [
+  "E", "F",      # pycodestyle + pyflakes: os erros de verdade
+  "I",           # imports ordenados (dispensa o isort)
+  "B",           # bugbear: pega o argumento default MUTÁVEL (`def f(x=[])`), o `except` largo
+  "S",           # bandit: shell=True, yaml.load inseguro, assert em produção, tempfile previsível
+  "UP",          # pyupgrade: sintaxe moderna coerente com o target-version
+  "SIM", "RET",  # simplificações que reduzem caminho de execução
+  "PTH",         # pathlib em vez de os.path
+  "ASYNC",       # chamada bloqueante dentro de async (o que trava o event loop)
+  "DTZ",         # datetime sem timezone — o bug que só aparece no horário de verão
+  "T20",         # print() esquecido em biblioteca
+  "PGH",         # PGH003/PGH004: `# type: ignore` e `# noqa` NUS (sem código) — vetados no piso.md
+  "RUF100",      # `# noqa` que não suprime nada (supressão morta)
+]
+ignore = [
+  "E501",        # comprimento: quem manda é o formatter, não o linter
+  "S603",        # `subprocess` com LISTA é o jeito certo (piso.md secao 5); S602/S604/S605 (shell=True) seguem ligados
+]
+
+[lint.per-file-ignores]
+# Teste pode usar `assert` (é o mecanismo do pytest) e print.
+"tests/**" = ["S101", "T20"]
+# Notebook convertido/script de exploração: ainda assim NÃO escapa do S (segurança).
+"notebooks/**" = ["T20", "E402"]
+
+[lint.flake8-bugbear]
+# Decorators que legitimamente recebem chamada como default (FastAPI Depends, etc.)
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "typer.Argument", "typer.Option"]
+
+[format]
+quote-style = "double"
+docstring-code-format = true   # o exemplo dentro da docstring também é formatado — e assim não apodrece

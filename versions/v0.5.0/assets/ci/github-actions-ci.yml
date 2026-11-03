@@ -1,0 +1,36 @@
+# CI de Python (schematize-python). Copie para .github/workflows/ci.yml.
+# Config do ruff: assets/lint/ruff.toml (estenda no pyproject.toml).
+name: ci
+# Gatilho (piso 27 da engineering): CI remoto NÃO roda por commit nem por PR. O gate por commit é LOCAL
+# (pre-commit + scripts/check-*.sh). Este workflow roda só em dispatch manual e em tag de promoção (hml-*, v*).
+on:
+  workflow_dispatch: {}
+  push:
+    tags: ['hml-*', 'v*']
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  python:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        python: ['3.13', '3.14']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+      - name: Dependências do app (lockfile respeitado; falha de instalação REPROVA, nunca é engolida)
+        run: uv sync --frozen
+      - name: Gatilhos de CI deste repo (piso 27)
+        run: bash .claude/skills/schematize-python/scripts/check-ci-triggers.sh .
+      - run: uv run --frozen ruff check .
+      - run: uv run --frozen ruff format --check .
+      - run: uv run --frozen mypy --strict src
+      - run: uv run --frozen pytest -q
+      - name: Auditoria do uv.lock (não do ambiente do runner)
+        run: uv export --frozen --no-emit-project -o "$RUNNER_TEMP/req.txt" && uvx pip-audit -r "$RUNNER_TEMP/req.txt" --no-deps --disable-pip
