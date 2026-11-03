@@ -3,7 +3,7 @@
 Todas as mudanças relevantes deste pacote, no formato [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 com versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
-## [Não lançado]
+## [0.5.0] — 2026-11-03
 ### Corrigido
 - **P0** Template de CI: gatilho `workflow_dispatch` + tags, `concurrency`; `uv sync --frozen` + `uv run`, sem `pip` e sem `|| true`; `pip-audit` sobre o `uv export` do lock.
 - **P1** `check-python.sh`: timeout/`SafeLoader` conferidos por chamada (antes o arquivo inteiro era liberado por uma ocorrência); `# noqa` e `# type: ignore` nus reprovam; ssh/scp/rsync/paramiko/fabric/kubectl/`docker save|load` reprovam (pisos 23/24; exceção `# ponte-build-ok:`); sem `ruff` sai 2 (era 0); sem config de projeto aplica o `ruff.toml` da casa. 22 casos, 10 vermelhos antes.
