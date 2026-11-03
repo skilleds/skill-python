@@ -67,6 +67,9 @@ Convenção: **MUST** = o gate cobra · **VETADO** = piso.
   qualquer coisa de segurança; `tempfile.mkstemp`/`TemporaryDirectory`, nunca caminho previsível em
   `/tmp`; timeout explícito em **toda** chamada de rede (`requests`/`httpx` **não** têm timeout por
   default — a chamada pendura para sempre e o worker morre segurando a conexão).
+- **O script não faz deploy nem operação (pisos 23 e 24):** automação em Python **nunca** manda código à VPS (`scp`/`rsync`/`paramiko`/`fabric`/`docker save|load`), **nunca** muda servidor por `ssh`/`kubectl` e **nunca** monta SQL ad-hoc: pede uma **operação nomeada** ao `<projeto>_ops`. Única exceção: ponte direta à máquina de build/teste dev/hml (piso 29), marcada na linha com `# ponte-build-ok: <host de maquinas.yml>`. O gate reprova o resto.
+- **Efeito externo (piso 18):** e-mail, cobrança e webhook reais nunca saem de não-produção; `scripts/check-external-effects.sh` roda junto com o gate.
+- **Supressão exige código:** `# noqa: S101` e `# type: ignore[arg-type]` sim; `# noqa` e `# type: ignore` nus não (o gate reprova).
 - Dependência: `uv.lock` + varredura de vulnerabilidade no CI (`stack-versoes.md`), e **pin por
   hash** onde o lock permite.
 

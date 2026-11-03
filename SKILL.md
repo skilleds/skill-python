@@ -58,7 +58,7 @@ Ferramenta sem piso não fica neutra: ela vira o lugar por onde o piso das outra
 ## Como usar
 
 1. **Antes de escrever**, saiba **se é aqui**: `references/escopo.md`. API de produto nova **não é**.
-2. **Rode o gate:** `bash scripts/check-python.sh .` — `0` passa · `1` reprova · `2` **nada para
+2. **Rode o gate:** `bash scripts/check-python.sh .` (sem `ruff` ele sai 2; aplica o `ruff.toml` da casa se o projeto não tiver config) e `scripts/check-external-effects.sh .` — `0` passa · `1` reprova · `2` **nada para
    verificar** (que não é aprovação).
 3. **Piso técnico** em `references/piso.md`: `uv` + lock, `ruff` como gate, tipos que travam,
    empacotamento, segurança, concorrência, estrutura.
@@ -109,3 +109,5 @@ Assets prontos para copiar: `assets/ci/github-actions-ci.yml` (ruff, mypy --stri
   Python da casa e é código de produção.
 - **`schematize-shell`** — a fronteira prática: passou de parsing sério, retry e dado estruturado,
   já não é shell.
+
+Herda os pisos 22–29 da `schematize-engineering` (git como trava de conclusão, deploy só do git, ops é o gate da IA, sem agents inúteis, relatório 30 min/handoff 6 h, CI remoto só antes do hml, microserviço autônomo, build em dev/hml + higiene).

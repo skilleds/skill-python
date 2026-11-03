@@ -3,16 +3,13 @@
 > Parte da skill **schematize-python**. **Fonte volátil:** tudo aqui tem prazo de validade e é
 > atualizado à parte do corpo normativo, que não crava número (regra `anexo-volatil` do lint).
 >
-> **Verificado em: 2026-10-14.** Cadência: trimestral e antes de cada release da skill.
+> **Verificado em: 2026-11-03 (fonte: `endoflife.date/api/python.json`).** Cadência: trimestral e antes de cada release da skill.
 
 ## Python — a linha suportada
 
 - **Piso normativo:** rodar numa versão **em suporte**. O CPython mantém cada minor por ~5 anos
   (2 de correção de bug + 3 só de segurança) e libera uma minor por ano, em outubro.
-- **Alvo da casa:** **3.13 ou 3.14** (as linhas estáveis em suporte); a **3.15** está planejada
-  para outubro de 2026 (PEP 790) — adote após o primeiro ponto-release e a prontidão das
-  dependências. **3.10 chega ao EOL em outubro de 2026**: nada de versão EOL. Não fixe "a versão
-  da máquina": a versão é declarada pelo projeto. <!-- reverificar: data exata do lançamento da 3.15 -->
+- **Alvo da casa:** **3.14** (correção de bug até 2027-10; EOL 2030-10-31). **3.13** está só em segurança desde 2026-10-01 (EOL 2029-10-31): aceita no legado, não em projeto novo. **3.15** foi lançada em 2026-10-09 (3.15.2 em 2026-10-25; EOL 2031-10-31): adote após prontidão das dependências (wheels). Versão EOL (3.10 e anteriores) nunca. Não fixe "a versão da máquina": a versão é declarada pelo projeto.
 - **`requires-python`** no `pyproject.toml` e **`.python-version`** no repo — a versão é declarada,
   não herdada do que estiver no PATH.
 - **Build free-threaded (sem GIL)**: experimental na 3.13; oficialmente **suportado desde a 3.14**

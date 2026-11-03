@@ -3,6 +3,18 @@
 Todas as mudanças relevantes deste pacote, no formato [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 com versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
+## [Não lançado]
+### Corrigido
+- **P0** Template de CI: gatilho `workflow_dispatch` + tags, `concurrency`; `uv sync --frozen` + `uv run`, sem `pip` e sem `|| true`; `pip-audit` sobre o `uv export` do lock.
+- **P1** `check-python.sh`: timeout/`SafeLoader` conferidos por chamada (antes o arquivo inteiro era liberado por uma ocorrência); `# noqa` e `# type: ignore` nus reprovam; ssh/scp/rsync/paramiko/fabric/kubectl/`docker save|load` reprovam (pisos 23/24; exceção `# ponte-build-ok:`); sem `ruff` sai 2 (era 0); sem config de projeto aplica o `ruff.toml` da casa. 22 casos, 10 vermelhos antes.
+- `ruff.toml`: `target-version = py313`, `PGH` e `RUF100`, `S603` ignorado (lista de args é o jeito certo).
+- `check-external-effects.sh` (+ teste) distribuído; `piso.md` §5 documenta script sem deploy/ops.
+- Versões (fonte: `endoflife.date/api/python.json`, 2026-11-03): 3.15 lançada em 2026-10-09; 3.13 só segurança; alvo 3.14.
+- Pisos 22–29 da `schematize-engineering` herdados por ponteiro em `SKILL.md` e `assets/CLAUDE.md` (o texto completo vem do sync de herdados).
+- `scripts/check-ci-triggers.sh` (+ teste) distribuído da engineering; `scripts/ci-template.test.sh` roda a regra sobre o template e o hook da própria skill.
+### Em espera `[~]`
+- Gate de framework web em projeto novo (P1-16); `mypy` no gate.
+
 ## [0.4.0] — 2026-10-14
 Description reduzida para o orçamento de listagem do catálogo; sem mudança de piso.
 
