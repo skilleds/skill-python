@@ -6,6 +6,8 @@
 set -uo pipefail
 
 raiz="${1:-.}"
+AQUI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RUFF_CASA="$AQUI/../assets/lint/ruff.toml"
 erros=(); avisos=()
 
 # tirar_docstring — imprime o arquivo sem o conteudo dos blocos de docstring (""" e ''').
@@ -33,6 +35,29 @@ tirar_docstring() {
   done < "$arq"
 }
 
+
+# chamadas_sem <regex-da-chamada> <regex-que-libera> — le o codigo no stdin e imprime o numero da linha de
+# cada chamada cujo PARENTESES COMPLETO (ate 20 linhas) nao contem o que libera. Antes o gate liberava o
+# ARQUIVO INTEIRO se a palavra `timeout`/`SafeLoader` aparecesse em qualquer outro ponto: uma chamada
+# correta escondia todas as erradas (falso verde, P1-11 da revisao de 2026-10-31).
+chamadas_sem() {
+  CP_RE="$1" CP_OK="$2" awk '
+    BEGIN { re = ENVIRON["CP_RE"]; ok = ENVIRON["CP_OK"] }
+    { linha[NR] = $0 }
+    END {
+      for (i = 1; i <= NR; i++) {
+        if (match(linha[i], re) == 0) continue
+        buf = substr(linha[i], RSTART); depth = 0; j = i
+        while (1) {
+          n = length(buf); o = gsub(/\(/, "(", buf); c = gsub(/\)/, ")", buf); depth = o - c
+          if (depth <= 0 || j >= NR || j - i >= 20) break
+          j++; buf = buf "\n" linha[j]
+        }
+        if (buf !~ ok) print i
+      }
+    }'
+}
+
 arquivos=()
 while IFS= read -r -d '' f; do arquivos+=("$f"); done < <(
   find "$raiz" -type f -name '*.py' \
@@ -50,17 +75,27 @@ if [ "${#arquivos[@]}" -eq 0 ] && [ "${#notebooks[@]}" -eq 0 ]; then
 fi
 
 # ------------------------------------------------------------------ 1. ruff (o gate)
-if command -v ruff >/dev/null 2>&1; then
-  saida="$(ruff check --output-format=concise "${arquivos[@]}" 2>&1)"
-  rc=$?
-  if [ "$rc" != 0 ] && [ -n "$saida" ]; then
-    while IFS= read -r l; do [ -n "$l" ] && erros+=("ruff: $l"); done <<< "$(head -30 <<< "$saida")"
-  fi
-  fmt="$(ruff format --check "${arquivos[@]}" 2>&1)"
-  [ $? != 0 ] && [ -n "$fmt" ] && avisos+=("ruff format: $(head -3 <<< "$fmt" | tr '\n' ' ')")
-else
-  avisos+=("ruff NÃO instalado — o gate rodou só as regras próprias (bem menos). Instale: uv tool install ruff (references/stack-versoes.md)")
+# Sem ruff NÃO há gate: sai 2 ("ausência de material não é aprovação"). Antes avisava e saía 0.
+if ! command -v ruff >/dev/null 2>&1; then
+  echo "✖ ruff NÃO instalado — o gate não consegue verificar nada. Instale: uv tool install ruff (references/stack-versoes.md)" >&2
+  exit 2
 fi
+# Config: a do projeto, se existir; senão a DA CASA (S/B/ASYNC/PGH/RUF100). Sem isso o ruff roda só E/F
+# e o gate declarava "ruff limpo" sem ter aplicado o piso (P1-12).
+cfg=()
+if [ -f "$raiz/ruff.toml" ] || [ -f "$raiz/.ruff.toml" ] || { [ -f "$raiz/pyproject.toml" ] && grep -q '^\[tool\.ruff' "$raiz/pyproject.toml"; }; then
+  :
+else
+  cfg=(--config "$RUFF_CASA")
+  avisos+=("projeto sem config de ruff: usando a da casa (assets/lint/ruff.toml). Estenda-a no pyproject.toml")
+fi
+saida="$(ruff check "${cfg[@]}" --output-format=concise "${arquivos[@]}" 2>&1)"
+rc=$?
+if [ "$rc" != 0 ] && [ -n "$saida" ]; then
+  while IFS= read -r l; do [ -n "$l" ] && [[ "$l" != Found\ * ]] && erros+=("ruff: $l"); done <<< "$(head -30 <<< "$saida")"
+fi
+fmt="$(ruff format "${cfg[@]}" --check "${arquivos[@]}" 2>&1)"
+[ $? != 0 ] && [ -n "$fmt" ] && avisos+=("ruff format: $(head -3 <<< "$fmt" | tr '\n' ' ')")
 
 # ------------------------------------------------------------------ 2. dependência e lock
 if [ -f "$raiz/pyproject.toml" ]; then
@@ -88,20 +123,34 @@ for f in "${arquivos[@]}"; do
     && erros+=("$nome: usa \`eval\`/\`exec\` — VETADO sobre dado externo (piso.md secao 5)")
   grep -qE 'shell\s*=\s*True' <<< "$codigo" \
     && erros+=("$nome: \`subprocess(..., shell=True)\` — passe LISTA de argumentos; com shell=True, um espaço no dado vira comando")
-  grep -qE 'yaml\.load\s*\(' <<< "$codigo" && ! grep -q 'SafeLoader\|safe_load' "$f" \
-    && erros+=("$nome: \`yaml.load\` sem SafeLoader — é execução de código, não parsing")
+  while IFS= read -r n; do [ -n "$n" ] && erros+=("$nome:$n: \`yaml.load\` sem SafeLoader — é execução de código, não parsing"); done \
+    < <(chamadas_sem 'yaml\.load[[:space:]]*\(' 'SafeLoader' <<< "$codigo")
   grep -qE '(^|[^_a-zA-Z])pickle\.(load|loads)\s*\(' <<< "$codigo" \
     && avisos+=("$nome: \`pickle.load\` — pickle é EXECUÇÃO de código: nunca sobre dado que veio de fora")
   grep -qE 'except\s+(Exception|BaseException)?\s*:\s*$' <<< "$codigo" && grep -qE '^\s*pass\s*$' <<< "$codigo" \
     && avisos+=("$nome: possível \`except: pass\` — erro engolido (piso.md secao 7)")
-  grep -qE '(requests|httpx)\.(get|post|put|patch|delete)\s*\(' <<< "$codigo" \
-    && ! grep -q 'timeout' "$f" \
-    && erros+=("$nome: chamada HTTP sem \`timeout\` — requests/httpx NÃO têm timeout por default: a chamada pendura para sempre e o worker morre segurando a conexão")
+  while IFS= read -r n; do [ -n "$n" ] && erros+=("$nome:$n: chamada HTTP sem \`timeout\` — requests/httpx NÃO têm timeout por default: a chamada pendura para sempre e o worker morre segurando a conexão"); done \
+    < <(chamadas_sem '(requests|httpx)\.(get|post|put|patch|delete)[[:space:]]*\(' 'timeout' <<< "$codigo")
   grep -qE '(^|[^_a-zA-Z])random\.(random|randint|choice|sample|shuffle)\s*\(' <<< "$codigo" \
     && grep -qiE 'token|senha|password|secret|otp|nonce|salt' "$f" \
     && erros+=("$nome: \`random\` em contexto de segurança — use \`secrets\` (o Mersenne Twister é previsível a partir da saída)")
   grep -qE 'def \w+\([^)]*=\s*(\[\]|\{\})' <<< "$codigo" \
     && erros+=("$nome: argumento default MUTÁVEL (\`=[]\`/\`={}\`) — ele é criado UMA vez e sobrevive entre chamadas")
+  # Supressão NUA: `# noqa` sem código e `# type: ignore` sem [código] — VETADOS (piso.md secoes 2 e 3).
+  # Lê o arquivo CRU (o `codigo` acima já perdeu os comentários).
+  grep -qP '#\s*noqa(?!\s*:)' "$f" 2>/dev/null \
+    && erros+=("$nome: \`# noqa\` sem código — suprima a regra específica (\`# noqa: S101\`) com o porquê (piso.md secao 2)")
+  grep -qP '#\s*type:\s*ignore(?!\[)' "$f" 2>/dev/null \
+    && erros+=("$nome: \`# type: ignore\` sem [código] — diga qual erro e por quê (piso.md secao 3)")
+  # Deploy/ops por script (pisos 23 e 24 da engineering): script Python NÃO manda código à VPS, NÃO muda
+  # servidor por ssh, NÃO aplica SQL ad-hoc: pede OPERAÇÃO NOMEADA ao `<projeto>_ops`. Exceção ESCOPADA:
+  # ponte direta à máquina de build/teste dev/hml (piso 29), marcada na linha com `# ponte-build-ok: <host de maquinas.yml>`.
+  semdoc="$(tirar_docstring "$f" | grep -vE '^[[:space:]]*#' )"
+  while IFS= read -r l; do
+    [ -n "$l" ] || continue
+    grep -q 'ponte-build-ok:' <<< "$l" && continue
+    erros+=("$nome: ${l:0:80} — deploy/ops por script é VETADO (pisos 23/24): peça uma operação nomeada ao <projeto>_ops; só a máquina de build dev/hml aceita ponte direta, com \`# ponte-build-ok: <host>\`")
+  done < <(grep -nE "(^|[^_a-zA-Z])(import|from)[[:space:]]+(paramiko|fabric|invoke)\b|[\"'](ssh|scp|sftp|rsync|kubectl)[\"']|os\.(system|popen)[[:space:]]*\([^)]*(ssh|scp|rsync|kubectl)|docker[[:space:]]+(save|load)" <<< "$semdoc" | sed 's/^\([0-9]*\):/L\1 /')
   grep -qE '/tmp/[A-Za-z0-9_.-]+' <<< "$codigo" && ! grep -q 'tempfile' "$f" \
     && avisos+=("$nome: caminho fixo em /tmp sem \`tempfile\` — /tmp é mundialmente gravável")
 done

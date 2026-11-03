@@ -116,4 +116,91 @@ saida="$(bash "$G" "$d" 2>&1)"; rc=$?
 if [ "$rc" = 2 ] && grep -q "não é aprovação" <<<"$saida"; then echo "  ✔ repo sem .py sai 2 (não 0)"; ok=$((ok+1))
 else echo "  ✖ repo sem .py: exit $rc"; fail=$((fail+1)); fi
 
+echo "== furos da revisão de 2026-10-31 (vermelho plantado) =="
+caso timeout-em-outra-chamada 1 "chamada HTTP sem" <<'FIX'
+import requests
+
+
+def a(url: str) -> str:
+    return requests.get(url, timeout=5).text
+
+
+def b(url: str) -> str:
+    return requests.get(url).text
+FIX
+caso timeout-multilinha-ok 0 "no piso" <<'FIX'
+import requests
+
+
+def a(url: str) -> str:
+    resp = requests.get(
+        url,
+        timeout=5,
+    )
+    return resp.text
+FIX
+caso yaml-load-com-safe-em-outro-ponto 1 "yaml.load" <<'FIX'
+import yaml
+
+
+def a(t: str) -> dict:
+    return yaml.safe_load(t)
+
+
+def b(t: str) -> dict:
+    return yaml.load(t)
+FIX
+caso noqa-nu 1 "noqa" <<'FIX'
+import os  # noqa
+
+
+def f() -> int:
+    return 1
+FIX
+caso type-ignore-nu 1 "type: ignore" <<'FIX'
+def f(x: int) -> str:
+    return x  # type: ignore
+FIX
+caso ssh-por-subprocess 1 "pisos 23/24" <<'FIX'
+import subprocess
+
+
+def deploy() -> None:
+    subprocess.run(["ssh", "vps", "systemctl restart app"], check=True, timeout=60)
+FIX
+caso scp-por-subprocess 1 "pisos 23/24" <<'FIX'
+import subprocess
+
+
+def enviar() -> None:
+    subprocess.run(["scp", "app.tar", "vps:/srv"], check=True, timeout=60)
+FIX
+caso paramiko 1 "pisos 23/24" <<'FIX'
+import paramiko
+
+
+def f() -> None:
+    paramiko.SSHClient()
+FIX
+caso ponte-build-escopada 0 "no piso" <<'FIX'
+import subprocess
+
+
+def sync() -> None:
+    subprocess.run(["rsync", "-a", "src/", "build-hml:/var/tmp/schematize-build/x/"], check=True, timeout=60)  # noqa: S607  # ponte-build-ok: build-hml
+FIX
+caso assert-sem-config-da-casa 1 "S101" <<'FIX'
+def f(x: int) -> int:
+    assert x > 0
+    return x
+FIX
+
+echo "== sem ruff não há gate (exit 2, nunca 0) =="
+d="$TMP/sem-ruff"; mkdir -p "$d" "$TMP/bin"
+printf 'def f() -> int:\n    return 1\n' > "$d/a.py"
+saida="$(PATH=/usr/bin:/bin bash "$G" "$d" 2>&1)"; rc=$?
+if PATH=/usr/bin:/bin command -v ruff >/dev/null 2>&1; then echo "  - pulado: ruff está em /usr/bin nesta máquina"
+elif [ "$rc" = 2 ] && grep -qF "ruff NÃO instalado" <<<"$saida"; then echo "  ✔ sem ruff sai 2"; ok=$((ok+1))
+else echo "  ✖ sem ruff: exit $rc"; sed 's/^/      /' <<<"$saida"; fail=$((fail+1)); fi
+
 echo; echo "check-python: $ok ok, $fail falha(s)"; [ "$fail" = 0 ]
